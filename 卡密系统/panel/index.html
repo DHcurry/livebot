@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>卡密系统 · 授权管理</title>
+<style>
+  :root{ --bg:#0F1115; --card:#171A21; --line:#262B36; --txt:#E7EAF0; --dim:#8A93A6;
+         --gold:#D7A743; --gold2:#B8892F; --red:#EF4444; --green:#34D399; --blue:#60A5FA; }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{ background:var(--bg); color:var(--txt); font:14px/1.6 "Segoe UI","Microsoft YaHei",sans-serif; padding:28px }
+  h1{ font-size:20px; font-weight:600 } h1 span{ color:var(--gold) }
+  .sub{ color:var(--dim); font-size:12px; margin-bottom:22px }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:18px }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px }
+  .card h2{ font-size:14px; color:var(--gold); margin-bottom:14px; font-weight:600 }
+  .row{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; align-items:center }
+  label{ color:var(--dim); font-size:12px; min-width:64px }
+  input,select,textarea{ background:#0C0E12; border:1px solid var(--line); color:var(--txt);
+    border-radius:8px; padding:8px 10px; font-size:13px; flex:1; min-width:120px; outline:none }
+  input:focus,textarea:focus{ border-color:var(--gold) }
+  button{ background:var(--gold); color:#17171B; border:0; border-radius:8px; padding:9px 18px;
+    font-weight:600; cursor:pointer; font-size:13px }
+  button:hover{ background:#E5B654 } button:disabled{ background:#3A3F4B; color:#777; cursor:not-allowed }
+  button.gh{ background:transparent; border:1px solid var(--line); color:var(--txt) }
+  button.gh:hover{ border-color:var(--gold); color:var(--gold) }
+  button.danger{ background:transparent; border:1px solid var(--red); color:var(--red) }
+  .stats{ display:flex; gap:22px; flex-wrap:wrap }
+  .stat b{ font-size:22px; display:block; color:var(--gold) }
+  .stat i{ font-style:normal; color:var(--dim); font-size:12px }
+  table{ width:100%; border-collapse:collapse; font-size:12.5px }
+  th{ color:var(--dim); text-align:left; padding:7px 6px; border-bottom:1px solid var(--line); font-weight:500 }
+  td{ padding:7px 6px; border-bottom:1px solid #1D212B; word-break:break-all }
+  .tag{ display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px }
+  .ok{ background:#123528; color:var(--green) } .bad{ background:#3A1414; color:var(--red) }
+  .exp{ background:#3A2E14; color:var(--gold) }
+  #msg{ position:fixed; top:18px; right:18px; background:#22262F; border:1px solid var(--gold);
+    padding:10px 16px; border-radius:10px; display:none; max-width:420px; z-index:9 }
+  textarea.lic{ width:100%; height:86px; font-family:Consolas,monospace; font-size:11px; resize:vertical }
+  .mini{ font-size:11px; color:var(--dim) }
+  a{ color:var(--blue) } code{ color:var(--gold); background:#0C0E12; padding:1px 6px; border-radius:5px }
+</style>
+</head>
+<body>
+<h1>🔑 卡密<span>管理系统</span></h1>
+<div class="sub">Ed25519 离线授权 · 本地签发 · 服务只监听 127.0.0.1 <b style="color:#D7A743">面板 v2</b>（列表带搜索修复）</div>
+<div id="msg"></div>
+
+<div class="grid">
+  <div class="card">
+    <h2>状态</h2>
+    <div id="keybar" class="row"></div>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div class="card">
+    <h2>签发授权</h2>
+    <div class="row"><label>客户</label><input id="customer" placeholder="客户名称"></div>
+    <div class="row"><label>设备码</label><input id="hwid" placeholder="XXXX-XXXXXXXX（留空=绑定本机）">
+      <button class="gh" onclick="fillMine()">本机</button></div>
+    <div class="row"><label></label>
+      <label style="min-width:auto"><input type="checkbox" id="anydev" style="width:auto;min-width:auto">不限设备</label>
+      <label style="min-width:auto" title="码发出去后，第一次激活时自动绑定对方设备，防转卖"><input type="checkbox" id="bindfirst" style="width:auto;min-width:auto">首激活绑定</label>
+      <label style="min-width:auto"><input type="checkbox" id="perm" style="width:auto;min-width:auto" onchange="expEl.disabled=this.checked">永久</label>
+      <input id="exp" type="date" style="max-width:170px">
+    </div>
+    <div class="row"><label>功能点</label><input id="features" value="*" placeholder="* 或 stream,cam"></div>
+    <div class="row"><label>备注</label><input id="notes" placeholder="可选"></div>
+    <div class="row"><button onclick="issue()">签发</button></div>
+    <div id="lastlic"></div>
+  </div>
+
+  <div class="card">
+    <h2>批量卡密</h2>
+    <div class="row"><label>客户</label><input id="b_customer" placeholder="渠道/客户名"></div>
+    <div class="row"><label>数量</label><input id="b_count" type="number" value="10" min="1" max="500" style="max-width:90px">
+      <input id="b_exp" type="date" style="max-width:170px">
+      <label style="min-width:auto"><input type="checkbox" id="b_perm" style="width:auto;min-width:auto" onchange="b_exp.disabled=this.checked">永久</label></div>
+    <div class="row"><button onclick="batch()">生成</button>
+      <button class="gh" onclick="location='/api/export.csv'">导出全部 CSV</button></div>
+    <div class="mini">卡密用于销售记账；激活码发给客户整段粘贴激活。</div>
+  </div>
+
+  <div class="card">
+    <h2>本机信息 / 公钥</h2>
+    <div class="row"><label>本机码</label><input id="mydev" readonly><button class="gh" onclick="copyEl(mydev)">复制</button></div>
+    <div class="row"><label>公钥</label><textarea id="pub" class="lic" readonly onclick="copyEl(pub)"></textarea></div>
+    <div class="mini">公钥给你的程序嵌入 <code>client/verify.py</code>；私钥 <code>data/issuer.key</code> 只留本机。</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:18px">
+  <h2>已签发 <span id="cnt" class="mini"></span></h2>
+  <div class="row"><input id="kw" placeholder="搜索 客户/ID/卡密…" oninput="loadList()" style="max-width:340px"></div>
+  <div style="overflow-x:auto"><table id="tbl">
+    <thead><tr><th>卡密</th><th>客户</th><th>设备</th><th>有效期</th><th>状态</th><th>操作</th></tr></thead>
+    <tbody></tbody></table></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+(function(){const u=new URLSearchParams(location.search).get('token');if(u){localStorage.setItem('kms_token',u);}})();
+const expEl=$('exp'); let TOKEN=localStorage.getItem('kms_token')||'';
+const qs=(sep='?')=>TOKEN?`${sep}token=${encodeURIComponent(TOKEN)}`:'';
+const tok=()=>TOKEN?`token=${encodeURIComponent(TOKEN)}`:'';
+function toast(t,ok=true){const m=$('msg');m.textContent=t;m.style.borderColor=ok?'var(--gold)':'var(--red)';m.style.display='block';setTimeout(()=>m.style.display='none',4000)}
+function copyEl(el){el.select&&el.select();navigator.clipboard.writeText(el.value).then(()=>toast('已复制'))}
+async function api(p,opt){const u=p+(p.includes('?')?'&':'?')+tok();const r=await fetch(u,opt);const j=await r.json().catch(()=>({}));if(r.status===401)throw new Error('Token 无效：请重新打开带 ?token= 的面板链接');if(!r.ok)throw new Error(j.error||r.status);return j}
+
+async function refresh(){
+  try{
+    const s=await api('/api/stats');
+    $('stats').innerHTML=`<div class="stat"><b>${s.active}</b><i>有效</i></div>
+      <div class="stat"><b>${s.total}</b><i>总签发</i></div>
+      <div class="stat"><b>${s.revoked}</b><i>吊销</i></div>
+      <div class="stat"><b>${s.expired}</b><i>过期</i></div>`;
+    $('keybar').innerHTML=s.key_ready?'<span class="tag ok">密钥已就绪</span>':
+      '<span class="tag bad">未初始化</span><button onclick="initKey()">初始化密钥对</button>';
+    const d=await api('/api/device'); $('mydev').value=d.device;
+    if(s.key_ready){const k=await api('/api/pubkey');$('pub').value=k.pubkey}
+    loadList();
+  }catch(e){toast(e.message,false)}
+}
+async function initKey(){try{await api('/api/init',{method:'POST'});toast('密钥对已生成，务必备份 data/issuer.key');refresh()}catch(e){toast(e.message,false)}}
+function fillMine(){api('/api/device').then(d=>$('hwid').value=d.device).catch(e=>toast(e.message,false))}
+
+async function issue(){
+  try{
+    const j=await api('/api/issue',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({customer:$('customer').value,hwid:$('hwid').value,
+        any_device:$('anydev').checked,permanent:$('perm').checked,expires:$('exp').value,
+        features:$('features').value,notes:$('notes').value,
+        bind_first:$('bindfirst').checked})});
+    $('lastlic').innerHTML=`<div class="mini" style="margin-top:8px">激活码（复制发给客户）：
+      <button class="gh" onclick='navigator.clipboard.writeText(${JSON.stringify(JSON.stringify(j.lic))}).then(()=>toast("激活码已复制"))'>复制激活码</button>
+      <button class="gh" onclick="location='/api/lic/${j.id}${qs()}'">下载 .lic</button></div>`;
+    toast('已签发 '+j.cardkey); refresh();
+  }catch(e){toast(e.message,false)}
+}
+async function batch(){
+  try{
+    const j=await api('/api/batch',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({customer:$('b_customer').value,count:+$('b_count').value,
+        permanent:$('b_perm').checked,expires:$('b_exp').value})});
+    const csv='卡密,授权ID,激活码\n'+j.items.map(i=>`${i.cardkey},${i.id},"${i.lic}"`).join('\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));
+    a.download='卡密批次.csv';a.click();toast(`已生成 ${j.count} 张并下载 CSV`);refresh();
+  }catch(e){toast(e.message,false)}
+}
+async function loadList(){
+  const rows=await api('/api/licenses?q='+encodeURIComponent($('kw').value));
+  $('cnt').textContent=`（${rows.length}）`;
+  const today=new Date().toISOString().slice(0,10);
+  $('tbl').tBodies[0].innerHTML=rows.map(r=>{
+    let st=r.revoked?'<span class="tag bad">已吊销</span>':
+      (r.expires&&r.expires<today?'<span class="tag exp">已过期</span>':'<span class="tag ok">有效</span>');
+    return `<tr><td><code>${r.cardkey||'-'}</code></td><td>${r.customer}</td>
+      <td class="mini">${r.hwid||'不限'}</td><td>${r.expires||'永久'}</td><td>${st}</td>
+      <td><a href="/api/lic/${r.id}${qs()}">下载</a>
+      <a href="javascript:copyCode('${r.id}')">激活码</a>
+      <a href="javascript:revoke('${r.id}',${r.revoked})" style="color:${r.revoked?'var(--green)':'var(--red)'}">${r.revoked?'恢复':'吊销'}</a></td></tr>`}).join('');
+}
+async function copyCode(id){const t=await (await fetch('/api/lic/'+id+qs())).text();navigator.clipboard.writeText(t.trim()).then(()=>toast('激活码已复制'))}
+async function revoke(id,rev){try{await api(rev?'/api/unrevoke':'/api/revoke',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});toast(rev?'已恢复':'已吊销');loadList()}catch(e){toast(e.message,false)}}
+refresh(); setInterval(refresh,15000);
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# —— 密钥与本地数据（绝不上库）——
+卡密系统/data/
+卡密系统/SERVER_TOKEN.txt
+*.lic
+**/licenses.db
+
+# —— 构建产物 ——
+__pycache__/
+*.pyc
+dist/
+build/
+*.log
+.venv/
+vcam_build/*.obj
+vcam_build/*.lib
+vcam_build/*.exp
+vcam_build/*.dll
+
+# —— 本机工具链（第三方二进制，另行分发）——
+FFmpeg完整版含MTX/
+*.exe.bak
+
+# —— 编辑器 ——
+.vscode/
+.idea/
